@@ -1,11 +1,13 @@
-# Panel build artifacts
-panel/panel
-panel/frontend/node_modules/
-panel/frontend/dist/*
-!panel/frontend/dist/.gitkeep
-panel/config.json
-panel/config.json.backup
-panel/deploy_history.json
+# Build artifacts
+panel
+frontend/node_modules/
+frontend/dist/*
+!frontend/dist/.gitkeep
+
+# Runtime files
+config.json
+config.json.backup
+deploy_history.json
 
 # Development docs
 docs/
