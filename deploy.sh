@@ -6,22 +6,22 @@ set -e
 # Change ONLY these variables, then run: sudo bash deploy.sh
 # ============================================================
 
-DOMAIN="maylancerfilms.com"
-GITHUB_REPO="https://github.com/YOUR_USERNAME/YOUR_REPO.git"
+DOMAIN="mychoicemyworld.in"
+GITHUB_REPO="https://github.com/olakunlevpn/mychoiceworld.git"
 GITHUB_BRANCH="main"
 PHP_VERSION="8.3"
-DB_PASSWORD="CHANGE_THIS_STRONG_PASSWORD"
+DB_PASSWORD="Green@1230"
 ENABLE_QUEUE_WORKER=true
 ENABLE_SCHEDULER=true
 
 # ============================================================
 # AUTO-GENERATED VARIABLES (no need to touch these)
 # ============================================================
-SITE_USER="forge"
+SITE_USER="root"
 SITE_GROUP="www-data"
 SITE_ROOT="/home/${SITE_USER}/${DOMAIN}"
 DB_NAME=$(echo "${DOMAIN}" | sed 's/[^a-zA-Z0-9]/_/g' | sed 's/_com$//' | sed 's/_+/_/g')
-DB_USER="${DB_NAME}_user"
+DB_USER="root"
 
 # Colors for output
 RED='\033[0;31m'
@@ -144,18 +144,29 @@ else
     sudo -u ${SITE_USER} touch .env
 fi
 
-# Update .env values using sed
-sed -i "s|APP_URL=.*|APP_URL=https://${DOMAIN}|" .env
-sed -i "s|APP_ENV=.*|APP_ENV=production|" .env
-sed -i "s|APP_DEBUG=.*|APP_DEBUG=false|" .env
-sed -i "s|DB_CONNECTION=.*|DB_CONNECTION=mysql|" .env
-sed -i "s|DB_HOST=.*|DB_HOST=127.0.0.1|" .env
-sed -i "s|DB_PORT=.*|DB_PORT=3306|" .env
-sed -i "s|DB_DATABASE=.*|DB_DATABASE=${DB_NAME}|" .env
-sed -i "s|DB_USERNAME=.*|DB_USERNAME=${DB_USER}|" .env
-sed -i "s|DB_PASSWORD=.*|DB_PASSWORD=${DB_PASSWORD}|" .env
-sed -i "s|QUEUE_CONNECTION=.*|QUEUE_CONNECTION=database|" .env
-sed -i "s|SESSION_DRIVER=.*|SESSION_DRIVER=file|" .env
+# Update .env values — replace if line exists, append if missing
+set_env_value() {
+    local key="$1"
+    local value="$2"
+    local file="$3"
+    if grep -q "^${key}=" "$file"; then
+        sed -i "s|^${key}=.*|${key}=${value}|" "$file"
+    else
+        echo "${key}=${value}" >> "$file"
+    fi
+}
+
+set_env_value "APP_URL" "https://${DOMAIN}" .env
+set_env_value "APP_ENV" "production" .env
+set_env_value "APP_DEBUG" "false" .env
+set_env_value "DB_CONNECTION" "mysql" .env
+set_env_value "DB_HOST" "127.0.0.1" .env
+set_env_value "DB_PORT" "3306" .env
+set_env_value "DB_DATABASE" "${DB_NAME}" .env
+set_env_value "DB_USERNAME" "${DB_USER}" .env
+set_env_value "DB_PASSWORD" "${DB_PASSWORD}" .env
+set_env_value "QUEUE_CONNECTION" "database" .env
+set_env_value "SESSION_DRIVER" "file" .env
 
 print_success ".env configured for production"
 
