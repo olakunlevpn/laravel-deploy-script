@@ -176,8 +176,8 @@ print_success ".env configured for production"
 print_step "5/10" "Installing Composer dependencies"
 
 cd "${SITE_ROOT}"
-sudo -u ${SITE_USER} /usr/bin/php${PHP_VERSION} /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction
-print_success "Composer dependencies installed"
+sudo -u ${SITE_USER} /usr/bin/php${PHP_VERSION} /usr/bin/composer install --optimize-autoloader --no-interaction
+print_success "Composer dependencies installed (with dev packages for seeders/faker)"
 
 # Generate app key
 sudo -u ${SITE_USER} /usr/bin/php${PHP_VERSION} artisan key:generate --force
@@ -186,6 +186,17 @@ print_success "App key generated"
 # Run migrations
 sudo -u ${SITE_USER} /usr/bin/php${PHP_VERSION} artisan migrate --force
 print_success "Migrations complete"
+
+# Ask about seeders
+echo ""
+printf "${YELLOW}→ Run database seeders? (y/n): ${NC}"
+read -r RUN_SEEDERS
+if [ "$RUN_SEEDERS" = "y" ] || [ "$RUN_SEEDERS" = "Y" ]; then
+    sudo -u ${SITE_USER} /usr/bin/php${PHP_VERSION} artisan db:seed --force
+    print_success "Database seeders completed"
+else
+    print_info "Skipping database seeders"
+fi
 
 # Storage link
 sudo -u ${SITE_USER} /usr/bin/php${PHP_VERSION} artisan storage:link 2>/dev/null || true
