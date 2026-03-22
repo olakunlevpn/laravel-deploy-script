@@ -277,16 +277,25 @@ print_success "Nginx configured and reloaded"
 # ============================================================
 print_step "8/10" "Setting up SSL certificate"
 
-print_info "Make sure DNS for ${DOMAIN} and www.${DOMAIN} points to this server first!"
-read -p "  DNS is pointed and ready? (y/n): " DNS_CONFIRM
+echo ""
+printf "${YELLOW}→ Install SSL certificate? (y/n): ${NC}"
+read -r SSL_CONFIRM
 
-if [ "$DNS_CONFIRM" = "y" ]; then
-    apt-get install -y certbot python3-certbot-nginx -qq
-    certbot --nginx -d ${DOMAIN} -d www.${DOMAIN} --non-interactive --agree-tos --email admin@${DOMAIN} --redirect
-    print_success "SSL certificate installed"
+if [ "$SSL_CONFIRM" = "y" ] || [ "$SSL_CONFIRM" = "Y" ]; then
+    print_info "Make sure DNS for ${DOMAIN} and www.${DOMAIN} points to this server first!"
+    printf "${YELLOW}→ DNS is pointed and ready? (y/n): ${NC}"
+    read -r DNS_CONFIRM
+    if [ "$DNS_CONFIRM" = "y" ] || [ "$DNS_CONFIRM" = "Y" ]; then
+        apt-get install -y certbot python3-certbot-nginx -qq
+        certbot --nginx -d ${DOMAIN} -d www.${DOMAIN} --non-interactive --agree-tos --email admin@${DOMAIN} --redirect
+        print_success "SSL certificate installed"
+    else
+        print_info "Skipping SSL — DNS not ready"
+        print_info "Run later: sudo certbot --nginx -d ${DOMAIN} -d www.${DOMAIN}"
+    fi
 else
-    print_info "Skipping SSL. Run this later:"
-    print_info "sudo certbot --nginx -d ${DOMAIN} -d www.${DOMAIN}"
+    print_info "Skipping SSL certificate"
+    print_info "Run later: sudo certbot --nginx -d ${DOMAIN} -d www.${DOMAIN}"
 fi
 
 # ============================================================
