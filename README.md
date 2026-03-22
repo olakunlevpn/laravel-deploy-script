@@ -1,19 +1,14 @@
-# Laravel Deploy Script & Panel
+# Laravel Deploy Panel
 
-One command. Your Laravel app is live.
+A self-hosted web panel for deploying Laravel applications to a fresh Ubuntu server — no terminal, no config files, no notepad. Configure everything through a browser, hit Deploy, and watch it happen in real time.
 
-This repo includes two ways to deploy Laravel applications to a fresh Ubuntu server:
-
-1. **`deploy.sh`** — A bash script. Edit four variables, run it, done.
-2. **Web Panel** — A browser-based UI. Fill in a wizard, click Deploy, watch it happen in real time.
-
-The web panel is distributed as a **single Go binary** with the React frontend embedded. Copy one file to your server and you're running.
+Distributed as a **single Go binary** with the React frontend embedded. Copy one file to your server and you're running.
 
 ---
 
 ## What It Does
 
-Both the script and the panel perform the same deployment steps:
+The panel replaces the manual process of SSHing into a server and editing shell variables. Instead, you open a browser, fill in a wizard, and the panel handles the full deployment:
 
 1. Creates the project directory with correct ownership
 2. Clones your GitHub repository
@@ -21,18 +16,26 @@ Both the script and the panel perform the same deployment steps:
 4. Copies `.env.example` and sets production values
 5. Runs `composer install`, `key:generate`, `migrate`, `storage:link`, and caches config/routes/views
 6. Sets file permissions and ownership
-7. Writes and enables an Nginx server block
+7. Writes and enables an Nginx server block with security headers
 8. Installs an SSL certificate via Certbot (optional — skipped if DNS is not yet pointed)
 9. Sets up a Supervisor queue worker (optional)
 10. Adds the scheduler cron job (optional)
+11. Runs a health check to verify the site responds
 
-The web panel additionally provides a dashboard to monitor services, run Laravel artisan commands, view logs, edit `.env`, and re-run any individual step.
+After deployment, the panel provides a full management dashboard:
+
+- **Dashboard** — System info (hostname, OS, uptime, CPU, memory, disk usage), software versions (PHP, Nginx, MySQL/PostgreSQL, Composer), service status with live green/red indicators
+- **Actions** — Run Laravel artisan commands (cache, config, routes, views, migrate, optimize), restart Nginx, re-apply file permissions
+- **Deploy Steps** — Re-run any individual deployment step from the UI
+- **Logs** — View Laravel, Nginx access, and Nginx error logs with search and filter
+- **Environment** — Edit the `.env` file directly with backup-on-save
+- **Settings** — Generate a systemd service file for auto-start on boot
 
 ---
 
 ## Server Setup
 
-Run the following on a fresh Ubuntu 20.04 / 22.04 server before deploying.
+The panel deploys your Laravel application — it does not install the server stack itself. Run the following on a fresh Ubuntu 20.04 / 22.04 server before using the panel.
 
 **System packages**
 
@@ -90,45 +93,7 @@ sudo systemctl enable supervisor
 
 ---
 
-## Option A: Deploy Script
-
-Open `deploy.sh` and change these four variables at the top:
-
-```bash
-DOMAIN="yourdomain.com"
-GITHUB_REPO="https://github.com/you/your-laravel-app.git"
-GITHUB_BRANCH="main"
-DB_PASSWORD="a-strong-password-here"
-```
-
-Then run it:
-
-```bash
-sudo bash deploy.sh
-```
-
-That's it. The script will walk you through each step and confirm before doing anything destructive.
-
-### Optional toggles
-
-```bash
-ENABLE_QUEUE_WORKER=false
-ENABLE_SCHEDULER=false
-```
-
-### SSL note
-
-The script will ask if your DNS is already pointing to the server before attempting SSL. If it's not ready yet, skip that step and run Certbot manually later:
-
-```bash
-sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com
-```
-
----
-
-## Option B: Web Panel
-
-### Installation
+## Installation
 
 Download the latest `panel` binary from the [Releases](https://github.com/olakunlevpn/laravel-deploy-script/releases) page, then copy it to your server:
 
@@ -153,9 +118,11 @@ To use a different port:
 sudo /opt/deploy-panel/panel --port 8080
 ```
 
-### Building from source
+---
 
-The `panel` binary has no runtime dependencies — no Go, no Node.js. But to compile it yourself:
+## Building From Source
+
+The `panel` binary has no runtime dependencies — no Go, no Node.js. But to compile it yourself you need Go 1.21+ and Node.js 18+:
 
 ```bash
 git clone https://github.com/olakunlevpn/laravel-deploy-script.git
@@ -163,26 +130,19 @@ cd laravel-deploy-script
 ./build.sh
 ```
 
-This requires Go 1.21+ and Node.js 18+. The result is a single `panel` file — roughly 6 MB — that contains everything.
+The result is a single `panel` file — roughly 6 MB — that contains everything.
 
-### Usage
+---
 
-**Wizard** — Open `http://your-server-ip:4432` in your browser. The 5-step wizard walks you through:
+## Usage
 
-1. Domain & repository
-2. Database credentials (auto-derived from domain)
-3. PHP version & server user
-4. Optional features (queue worker, scheduler)
-5. Review & deploy with real-time SSE progress
+### Wizard
 
-**Dashboard** — After deployment, shows system info (hostname, OS, uptime, memory, disk, CPU), service status with green/red indicators, and software versions.
+Open `http://your-server-ip:4432` in your browser. The 5-step wizard walks you through:
 
-**Sidebar pages:**
-- **Actions** — Laravel artisan commands, Nginx reload/restart, file permissions
-- **Deploy Steps** — Re-run any individual deployment step
-- **Logs** — View Laravel, Nginx access, and Nginx error logs with search
-- **Environment** — Edit the `.env` file with backup-on-save
-- **Settings** — Systemd service file for auto-start on boot
+**Step 1 — Domain & Project** Enter your domain name, GitHub repository URL, and branch.
+
+**Step 2 — Database** Enter a database password. Select MySQL or PostgreSQL. The database name and user are auto-generated from your domain and can be edited.
 
 | Domain | Derived DB name | Derived DB user |
 |--------|----------------|-----------------|
@@ -190,21 +150,50 @@ This requires Go 1.21+ and Node.js 18+. The result is a single `panel` file — 
 | `my-app.com` | `my_app` | `my_app_user` |
 | `api.myapp.com` | `api_myapp` | `api_myapp_user` |
 
+**Step 3 — PHP & Server** Select your PHP version (8.1, 8.2, or 8.3). The site user is auto-detected from the server.
+
+**Step 4 — Features** Toggle the queue worker (Supervisor) and task scheduler (cron) on or off.
+
+**Step 5 — Review & Deploy** Review all settings. Check the DNS confirmation box if you have already pointed your domain to this server's IP — this enables SSL installation. Click **Deploy Now** and watch the progress in real time via SSE streaming.
+
+Preflight checks run automatically before deployment starts to verify all required software is installed and services are running.
+
+### Dashboard
+
+After deployment, the dashboard displays comprehensive server information:
+
+- **System** — Hostname, OS, kernel version, uptime, CPU cores, load average
+- **Resources** — Memory and disk usage with color-coded progress bars
+- **Software** — PHP, Nginx, MySQL/PostgreSQL, and Composer versions with installation status
+- **Project** — Domain, site root, repository, branch, database details, enabled features
+- **Services** — Live status of Nginx, PHP-FPM, MySQL, Supervisor, SSL certificate, and queue worker with restart buttons
+
+### Webhook
+
+The panel exposes a webhook endpoint for CI/CD integration:
+
+```bash
+curl -X POST http://your-server-ip:4432/api/webhook/deploy
+```
+
+This runs `git pull`, `composer install`, `migrate`, and re-caches config/routes/views — a quick redeploy without going through the full wizard.
+
 ---
 
 ## Configuration
 
-**Script** — Edit the variables at the top of `deploy.sh`.
+Settings are saved to `config.json` in the same directory as the binary. The file is written when you click **Deploy Now** in the wizard. A backup is automatically created before each save.
 
-**Panel** — Settings are saved to `config.json` in the same directory as the binary. The file is written when you click Deploy Now in the wizard.
+To edit settings after a deployment, click **Setup** in the sidebar to re-open the wizard pre-filled with current values.
 
 ---
 
 ## Security
 
-- The web panel has **no authentication**. Access control relies entirely on your firewall. Restrict port 4432 to your own IP address.
+- The panel has **no authentication**. Access control relies entirely on your firewall. Restrict port 4432 to your own IP address.
 - The binary **must run as root** because deployment operations require root-level access (Nginx config, MySQL root login, Certbot, Supervisor, chown).
 - The MySQL setup assumes the root account is accessible without a password (the default on Ubuntu with `auth_socket`). If your root account has a password set, step 3 will fail.
+- Config validation enforces domain format, password minimum length, and safe characters for database names and system users.
 
 ---
 
