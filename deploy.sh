@@ -210,6 +210,17 @@ print_success ".env configured for production"
 print_step "5/10" "Installing Composer dependencies"
 
 cd "${SITE_ROOT}"
+
+# Ensure Laravel's writable directories exist before composer/artisan run.
+echo "Creating Laravel cache/storage directories..."
+mkdir -p bootstrap/cache
+mkdir -p storage/framework/cache
+mkdir -p storage/framework/sessions
+mkdir -p storage/framework/views
+mkdir -p storage/logs
+chmod -R 775 bootstrap/cache
+chmod -R 775 storage
+
 sudo -u ${SITE_USER} /usr/bin/php${PHP_VERSION} /usr/local/bin/composer install --optimize-autoloader --no-interaction
 print_success "Composer dependencies installed (with dev packages for seeders/faker)"
 
