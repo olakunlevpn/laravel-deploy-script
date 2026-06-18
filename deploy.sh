@@ -134,19 +134,31 @@ else
     MYSQL_ADMIN=(sudo mysql)
 fi
 
-# Create the database and a dedicated app user that authenticates by password
-# over TCP (127.0.0.1), which is how the Laravel app connects.
-"${MYSQL_ADMIN[@]}" <<SQL
-DROP DATABASE IF EXISTS \`${DB_NAME}\`;
-CREATE DATABASE \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASSWORD}';
+# Create the application database (idempotent — does not drop existing data).
+"${MYSQL_ADMIN[@]}" -e "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+# If the user already exists (e.g. a shared 'forge' user), only grant on the new
+# database — never recreate it or reset its password, which would break every
+# other site that shares it. Otherwise create a dedicated user that
+# authenticates by password over TCP (127.0.0.1), which is how the app connects.
+USER_HOSTS=$("${MYSQL_ADMIN[@]}" -N -B -e "SELECT host FROM mysql.user WHERE user='${DB_USER}';")
+
+if [ -n "${USER_HOSTS}" ]; then
+    print_info "User '${DB_USER}' exists; granting on ${DB_NAME} only (password left unchanged)"
+    for H in ${USER_HOSTS}; do
+        "${MYSQL_ADMIN[@]}" -e "GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'${H}';"
+    done
+else
+    print_info "Creating dedicated user '${DB_USER}'"
+    "${MYSQL_ADMIN[@]}" <<SQL
 CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
-ALTER USER '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASSWORD}';
-ALTER USER '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
-GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'127.0.0.1';
+CREATE USER IF NOT EXISTS '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASSWORD}';
 GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';
-FLUSH PRIVILEGES;
+GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'127.0.0.1';
 SQL
+fi
+
+"${MYSQL_ADMIN[@]}" -e "FLUSH PRIVILEGES;"
 print_success "Database: ${DB_NAME} | User: ${DB_USER}"
 
 # ============================================================
