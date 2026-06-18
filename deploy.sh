@@ -210,7 +210,7 @@ print_success ".env configured for production"
 print_step "5/10" "Installing Composer dependencies"
 
 cd "${SITE_ROOT}"
-sudo -u ${SITE_USER} /usr/bin/php${PHP_VERSION} /usr/bin/composer install --optimize-autoloader --no-interaction
+sudo -u ${SITE_USER} /usr/bin/php${PHP_VERSION} /usr/local/bin/composer install --optimize-autoloader --no-interaction
 print_success "Composer dependencies installed (with dev packages for seeders/faker)"
 
 # Generate app key
