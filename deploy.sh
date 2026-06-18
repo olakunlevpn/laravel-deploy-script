@@ -14,6 +14,7 @@ DB_PASSWORD="Green@1230"          # password for the app's dedicated MySQL user
 MYSQL_ROOT_PASSWORD=""            # MySQL admin password; leave empty to use sudo socket auth
 ENABLE_QUEUE_WORKER=true
 ENABLE_SCHEDULER=true
+export COMPOSER_ALLOW_SUPERUSER=1
 
 # ============================================================
 # AUTO-GENERATED VARIABLES (no need to touch these)
