@@ -10,9 +10,11 @@ DOMAIN="mychoicemyworld.in"
 GITHUB_REPO="https://github.com/olakunlevpn/mychoiceworld.git"
 GITHUB_BRANCH="main"
 PHP_VERSION="8.3"
-DB_PASSWORD="Green@1230"
+DB_PASSWORD="Green@1230"          # password for the app's dedicated MySQL user
+MYSQL_ROOT_PASSWORD=""            # MySQL admin password; leave empty to use sudo socket auth
 ENABLE_QUEUE_WORKER=true
 ENABLE_SCHEDULER=true
+export COMPOSER_ALLOW_SUPERUSER=1
 
 # ============================================================
 # AUTO-GENERATED VARIABLES (no need to touch these)
@@ -21,7 +23,7 @@ SITE_USER="root"
 SITE_GROUP="www-data"
 SITE_ROOT="/home/${SITE_USER}/${DOMAIN}"
 DB_NAME=$(echo "${DOMAIN}" | sed 's/[^a-zA-Z0-9]/_/g' | sed 's/_com$//' | sed 's/_+/_/g')
-DB_USER="root"
+DB_USER="${DB_NAME}"   # dedicated app user, never root (root often uses auth_socket)
 
 # Colors for output
 RED='\033[0;31m'
@@ -124,10 +126,42 @@ print_success "Cloned ${GITHUB_REPO} (${GITHUB_BRANCH})"
 # ============================================================
 print_step "3/10" "Setting up MySQL database"
 
-mysql -u root -p"${DB_PASSWORD}" -e "DROP DATABASE IF EXISTS \`${DB_NAME}\`;"
-mysql -u root -p"${DB_PASSWORD}" -e "CREATE DATABASE \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-mysql -u root -p"${DB_PASSWORD}" -e "GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';"
-mysql -u root -p"${DB_PASSWORD}" -e "FLUSH PRIVILEGES;"
+# Admin connection: use root password if set, otherwise sudo socket auth
+# (Ubuntu's root@localhost defaults to the auth_socket plugin, which rejects
+#  password logins over TCP — the cause of "Access denied ... [1698]" at migrate).
+if [ -n "${MYSQL_ROOT_PASSWORD}" ]; then
+    MYSQL_ADMIN=(mysql -u root -p"${MYSQL_ROOT_PASSWORD}")
+else
+    MYSQL_ADMIN=(sudo mysql)
+fi
+
+# Create the application database (idempotent — does not drop existing data).
+"${MYSQL_ADMIN[@]}" -e "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+# If the user already exists (e.g. a shared 'forge' user), only grant on the new
+# database — never recreate it or reset its password, which would break every
+# other site that shares it. Otherwise create a dedicated user that
+# authenticates by password over TCP (127.0.0.1), which is how the app connects.
+USER_HOSTS=$("${MYSQL_ADMIN[@]}" -N -B -e "SELECT host FROM mysql.user WHERE user='${DB_USER}';")
+
+if [ -n "${USER_HOSTS}" ]; then
+    print_info "User '${DB_USER}' exists; granting on ${DB_NAME} only (password left unchanged)"
+    for H in ${USER_HOSTS}; do
+        "${MYSQL_ADMIN[@]}" -e "GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'${H}';"
+    done
+else
+    print_info "Creating dedicated user '${DB_USER}'"
+    "${MYSQL_ADMIN[@]}" <<SQL
+CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
+CREATE USER IF NOT EXISTS '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASSWORD}';
+ALTER USER '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
+ALTER USER '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASSWORD}';
+GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';
+GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'127.0.0.1';
+SQL
+fi
+
+"${MYSQL_ADMIN[@]}" -e "FLUSH PRIVILEGES;"
 print_success "Database: ${DB_NAME} | User: ${DB_USER}"
 
 # ============================================================
@@ -176,7 +210,18 @@ print_success ".env configured for production"
 print_step "5/10" "Installing Composer dependencies"
 
 cd "${SITE_ROOT}"
-sudo -u ${SITE_USER} /usr/bin/php${PHP_VERSION} /usr/bin/composer install --optimize-autoloader --no-interaction
+
+# Ensure Laravel's writable directories exist before composer/artisan run.
+echo "Creating Laravel cache/storage directories..."
+mkdir -p bootstrap/cache
+mkdir -p storage/framework/cache
+mkdir -p storage/framework/sessions
+mkdir -p storage/framework/views
+mkdir -p storage/logs
+chmod -R 775 bootstrap/cache
+chmod -R 775 storage
+
+sudo -u ${SITE_USER} /usr/bin/php${PHP_VERSION} /usr/local/bin/composer install --optimize-autoloader --no-interaction
 print_success "Composer dependencies installed (with dev packages for seeders/faker)"
 
 # Generate app key
